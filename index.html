@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AppSync Chat Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .chat-container {
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        /* Header */
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px 30px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .chat-header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .chat-avatar {
+            width: 45px;
+            height: 45px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .chat-title h1 {
+            font-size: 20px;
+            margin-bottom: 3px;
+        }
+        
+        .chat-title p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .status-badge.disconnected {
+            background: rgba(244, 67, 54, 0.9);
+        }
+        
+        .status-badge.connecting {
+            background: rgba(255, 152, 0, 0.9);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .status-badge.connected {
+            background: rgba(76, 175, 80, 0.9);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        /* Messages Area */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .messages-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .messages-area::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .messages-area::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        
+        .messages-area::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message.ai {
+            justify-content: flex-start;
+        }
+        
+        .message.system {
+            justify-content: center;
+        }
+        
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.ai .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .message.system .message-bubble {
+            background: rgba(0, 0, 0, 0.05);
+            color: #666;
+            font-size: 13px;
+            padding: 8px 14px;
+            border-radius: 12px;
+            max-width: 90%;
+            text-align: center;
+        }
+        
+        .message-sender {
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .message.user .message-sender {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .message.ai .message-sender {
+            color: #667eea;
+        }
+        
+        .message-text {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .message-time {
+            font-size: 10px;
+            margin-top: 4px;
+            opacity: 0.6;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            padding: 40px;
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        .empty-state-text {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .empty-state-subtext {
+            font-size: 14px;
+            color: #aaa;
+        }
+        
+        /* Input Area */
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 2px solid #e0e0e0;
+            flex-shrink: 0;
+        }
+        
+        .connection-panel {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 10px;
+            border: 2px dashed #ddd;
+        }
+        
+        .connection-panel.hidden {
+            display: none;
+        }
+        
+        .connection-inputs {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .connection-panel input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 13px;
+            transition: border-color 0.3s;
+        }
+        
+        .connection-panel input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .connection-panel label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        
+        .btn-connect {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-connect:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-connect:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .message-input-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 14px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+        
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .message-input:disabled {
+            background: #f5f5f5;
+            cursor: not-allowed;
+        }
+        
+        .btn-send {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-send:hover:not(:disabled) {
+            transform: scale(1.1);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-send:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            gap: 10px;
+            padding: 10px 20px;
+            background: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+            font-size: 12px;
+            color: #666;
+            flex-shrink: 0;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .stat-item strong {
+            color: #667eea;
+        }
+        
+        /* Loading */
+        .loading-dots {
+            display: inline-block;
+        }
+        
+        .loading-dots::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        /* Responsive */
+        /* Modal CORS */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+        
+        .modal-dialog {
+            background: white;
+            border-radius: 20px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #f44336 0%, #e91e63 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 20px 20px 0 0;
+        }
+        
+        .modal-header h2 {
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+        
+        .modal-header p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        .modal-body {
+            padding: 30px;
+        }
+        
+        .modal-body h3 {
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .modal-body p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .modal-body code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #e91e63;
+        }
+        
+        .curl-box {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin: 15px 0;
+            word-wrap: break-word;
+            overflow-x: auto;
+        }
+        
+        .modal-textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        
+        .modal-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-modal {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-modal-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-modal-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-modal:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .help-list {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .help-list strong {
+            color: #856404;
+        }
+        
+        .help-list ol {
+            margin: 10px 0 0 20px;
+        }
+        
+        .help-list li {
+            color: #856404;
+            font-size: 13px;
+            margin: 5px 0;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+            
+            .chat-container {
+                height: 100vh;
+                max-width: 100%;
+                border-radius: 0;
+            }
+            
+            .connection-inputs {
+                grid-template-columns: 1fr;
+            }
+            
+            .message-bubble {
+                max-width: 85%;
+            }
+            
+            .modal-dialog {
+                max-height: 90vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <div class="chat-avatar">🤖</div>
+                <div class="chat-title">
+                    <h1>AppSync Chat Demo</h1>
+                    <p>Real-time messaging com AWS</p>
+                </div>
+            </div>
+            <div class="status-badge disconnected" id="statusBadge">
+                <div class="status-dot"></div>
+                <span>Desconectado</span>
+            </div>
+        </div>
+        
+        <!-- Messages Area -->
+        <div class="messages-area" id="messagesArea">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-state-icon">💬</div>
+                <div class="empty-state-text">Bem-vindo ao Chat!</div>
+                <div class="empty-state-subtext">Conecte-se para começar a conversar</div>
+            </div>
+        </div>
+        
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <strong id="eventCount">0</strong> eventos recebidos
+            </div>
+            <div class="stat-item">
+                <strong id="messagesSent">0</strong> mensagens enviadas
+            </div>
+        </div>
+        
+        <!-- Input Area -->
+        <div class="input-area">
+            <!-- Connection Panel -->
+            <div class="connection-panel" id="connectionPanel">
+                <div class="connection-inputs">
+                    <div>
+                        <label>API URL</label>
+                        <input type="text" id="apiUrl" value="https://api.example.com" placeholder="URL da API">
+                    </div>
+                    <div>
+                        <label>Agent ID</label>
+                        <input type="text" id="agentId" value="6426d565-ec6a-4cd3-bbc1-a1610df607aa" placeholder="Agent ID">
+                    </div>
+                    <div>
+                        <label>Visitor ID</label>
+                        <input type="text" id="visitorId" value="visitor-1234" placeholder="Visitor ID">
+                    </div>
+                </div>
+                <button class="btn-connect" id="connectBtn">🔌 Conectar ao AppSync</button>
+            </div>
+            
+            <!-- Message Input -->
+            <div class="message-input-area">
+                <input 
+                    type="text" 
+                    class="message-input" 
+                    id="messageInput" 
+                    placeholder="Digite sua mensagem..." 
+                    disabled
+                >
+                <button class="btn-send" id="sendBtn" disabled>
+                    📤
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AppSyncChatClient {
+            constructor() {
+                this.ws = null;
+                this.subscription = null;
+                this.sessionId = null;
+                this.credentials = null;
+                this.endpoint = null;
+                this.region = null;
+                this.eventCount = 0;
+                this.messagesSent = 0;
+                this.apiUrl = null;
+            }
+            
+            addMessage(type, text, sender = null, time = null) {
+                const messagesArea = document.getElementById('messagesArea');
+                const emptyState = document.getElementById('emptyState');
+                
+                if (emptyState) {
+                    emptyState.remove();
+                }
+                
+                const message = document.createElement('div');
+                message.className = `message ${type}`;
+                
+                if (type === 'system') {
+                    message.innerHTML = `
+                        <div class="message-bubble">
+                            <div class="message-text">${text}</div>
+                        </div>
+                    `;
+                } else {
+                    const senderLabel = sender === 'user' ? 'Você' : sender === 'api' ? 'Assistente IA' : sender;
+                    const timeStr = time ? new Date(time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    
+                    message.innerHTML = `
+                        <div class="message-bubble">
+                            <div class="message-sender">${senderLabel}</div>
+                            <div class="message-text">${text}</div>
+                            <div class="message-time">${timeStr}</div>
+                        </div>
+                    `;
+                }
+                
+                messagesArea.appendChild(message);
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
+            
+            updateStatus(text, state) {
+                const badge = document.getElementById('statusBadge');
+                badge.className = `status-badge ${state}`;
+                badge.innerHTML = `
+                    <div class="status-dot"></div>
+                    <span>${text}</span>
+                `;
+            }
+            
+            updateStats() {
+                document.getElementById('eventCount').textContent = this.eventCount;
+                document.getElementById('messagesSent').textContent = this.messagesSent;
+            }
+            
+            async fetchCredentials(apiUrl, agentId, visitorId) {
+                try {
+                    this.addMessage('system', '🔍 Buscando credenciais...');
+                    this.apiUrl = apiUrl;
+                    
+                    const response = await axios.get(`${apiUrl}/agent/${agentId}/chat/${visitorId}`);
+                    
+                    if (!response.data.success) {
+                        throw new Error('Resposta da API não foi bem-sucedida');
+                    }
+                    
+                    const data = response.data.data;
+                    this.sessionId = data.session_id;
+                    this.endpoint = data.web_socket.endpoint;
+                    this.region = data.web_socket.region;
+                    this.credentials = data.web_socket.credentials;
+                    
+                    // Carregar mensagens antigas
+                    if (data.messages && data.messages.length > 0) {
+                        data.messages.forEach(msg => {
+                            const type = msg.role === 'user' ? 'user' : 'ai';
+                            this.addMessage(type, msg.message, msg.role, msg.created_at);
+                        });
+                    }
+                    
+                    this.addMessage('system', `✅ Credenciais obtidas! Session ID: ${this.sessionId.substring(0, 8)}...`);
+                    
+                    return true;
+                } catch (error) {
+                    if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+                        this.addMessage('system', `❌ Erro de CORS! Abrindo modal...`);
+                        this.showCorsModal(apiUrl, agentId, visitorId);
+                    } else {
+                        this.addMessage('system', `❌ Erro ao obter credenciais: ${error.message}`);
+                    }
+                    console.error('Erro:', error);
+                    return false;
+                }
+            }
+            
+            showCorsModal(apiUrl, agentId, visitorId) {
+                const curlCommand = `curl "${apiUrl}/agent/${agentId}/chat/${visitorId}"`;
+                
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop';
+                backdrop.innerHTML = `
+                    <div class="modal-dialog">
+                        <div class="modal-header">
+                            <h2>🚫 Erro de CORS Detectado</h2>
+                            <p>A API bloqueou a requisição do navegador</p>
+                        </div>
+                        <div class="modal-body">
+                            <div class="help-list">
+                                <strong>💡 Soluções:</strong>
+                                <ol>
+                                    <li>Abra o arquivo direto (file://) em vez de localhost</li>
+                                    <li>Use o comando curl abaixo no terminal</li>
+                                    <li>Cole o resultado no campo abaixo</li>
+                                </ol>
+                            </div>
+                            
+                            <h3>📋 Copie este comando:</h3>
+                            <div class="curl-box" id="curlCommand">${curlCommand}</div>
+                            <button class="btn-modal btn-modal-secondary" onclick="navigator.clipboard.writeText(document.getElementById('curlCommand').textContent); this.textContent = '✅ Copiado!'; setTimeout(() => this.textContent = '📋 Copiar Comando', 2000)">📋 Copiar Comando</button>
+                            
+                            <h3 style="margin-top: 25px;">📝 Cole o JSON da resposta aqui:</h3>
+                            <textarea class="modal-textarea" id="credentialsJson" placeholder='{"success": true, "data": {...}}'></textarea>
+                            
+                            <div class="modal-actions">
+                                <button class="btn-modal btn-modal-secondary" id="cancelModal">❌ Cancelar</button>
+                                <button class="btn-modal btn-modal-primary" id="useManualCredentials">✅ Usar Credenciais</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(backdrop);
+                
+                document.getElementById('cancelModal').onclick = () => {
+                    backdrop.remove();
+                };
+                
+                document.getElementById('useManualCredentials').onclick = async () => {
+                    try {
+                        const jsonText = document.getElementById('credentialsJson').value;
+                        const response = JSON.parse(jsonText);
+                        
+                        if (response.success && response.data) {
+                            const data = response.data;
+                            this.sessionId = data.session_id;
+                            this.endpoint = data.web_socket.endpoint;
+                            this.region = data.web_socket.region;
+                            this.credentials = data.web_socket.credentials;
+                            
+                            // Carregar mensagens antigas
+                            if (data.messages && data.messages.length > 0) {
+                                data.messages.forEach(msg => {
+                                    const type = msg.role === 'user' ? 'user' : 'ai';
+                                    this.addMessage(type, msg.message, msg.role, msg.created_at);
+                                });
+                            }
+                            
+                            this.addMessage('system', `✅ Credenciais manuais aplicadas!`);
+                            this.addMessage('system', `📋 Session ID: ${this.sessionId.substring(0, 8)}...`);
+                            
+                            backdrop.remove();
+                            
+                            // Continuar com validação e conexão
+                            if (this.validateCredentials()) {
+                                this.updateStatus('Conectando', 'connecting');
+                                const connected = await this.connectToAppSync();
+                                
+                                if (connected) {
+                                    document.getElementById('connectionPanel').classList.add('hidden');
+                                    document.getElementById('messageInput').disabled = false;
+                                    document.getElementById('sendBtn').disabled = false;
+                                } else {
+                                    const btn = document.getElementById('connectBtn');
+                                    btn.disabled = false;
+                                    btn.innerHTML = '🔌 Conectar ao AppSync';
+                                }
+                            }
+                        } else {
+                            alert('JSON inválido! Certifique-se de que "success": true está presente.');
+                        }
+                    } catch (error) {
+                        alert('Erro ao processar JSON: ' + error.message);
+                    }
+                };
+            }
+            
+            validateCredentials() {
+                try {
+                    const expirationDate = new Date(this.credentials.expiration);
+                    const now = new Date();
+                    
+                    if (expirationDate <= now) {
+                        throw new Error('Credenciais expiradas! Busque novas credenciais.');
+                    }
+                    
+                    const minutesUntilExpiration = Math.floor((expirationDate - now) / 1000 / 60);
+                    
+                    if (minutesUntilExpiration < 5) {
+                        this.addMessage('system', `⚠️ Credenciais expiram em ${minutesUntilExpiration} minutos`);
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    this.addMessage('system', `❌ ${error.message}`);
+                    return false;
+                }
+            }
+            
+            async connectToAppSync() {
+                try {
+                    this.addMessage('system', '🔌 Conectando ao AppSync...');
+                    this.updateStatus('Conectando', 'connecting');
+                    await this.setupWebSocketSubscription();
+                    return true;
+                } catch (error) {
+                    this.addMessage('system', `❌ Erro na conexão: ${error.message}`);
+                    this.updateStatus('Desconectado', 'disconnected');
+                    return false;
+                }
+            }
+            
+            async setupWebSocketSubscription() {
+                const realtimeEndpoint = this.endpoint.replace('appsync-api', 'appsync-realtime-api');
+                const apiUrl = new URL(this.endpoint);
+                apiUrl.pathname = '/graphql/connect';
+                
+                const authHeader = await this.createSigV4Authorization(apiUrl);
+                const amzDate = this.getAmzDate(new Date());
+                
+                const header = {
+                    host: apiUrl.host,
+                    'x-amz-date': amzDate,
+                    'x-amz-security-token': this.credentials.session_token,
+                    Authorization: authHeader
+                };
+                
+                const headerEncoded = btoa(JSON.stringify(header));
+                const payloadEncoded = btoa(JSON.stringify({}));
+                const wsUrl = `${realtimeEndpoint.replace('https', 'wss')}?header=${headerEncoded}&payload=${payloadEncoded}`;
+                
+                this.ws = new WebSocket(wsUrl, ['graphql-ws']);
+                
+                this.ws.onopen = () => {
+                    this.ws.send(JSON.stringify({ type: 'connection_init' }));
+                };
+                
+                this.ws.onmessage = async (event) => {
+                    const message = JSON.parse(event.data);
+                    
+                    if (message.type === 'connection_ack') {
+                        this.addMessage('system', '✅ Conectado ao AppSync!');
+                        this.updateStatus('Conectado', 'connected');
+                        await this.sendSubscription();
+                    } else if (message.type === 'start_ack') {
+                        this.addMessage('system', '✅ Ouvindo mensagens em tempo real');
+                    } else if (message.type === 'data') {
+                        this.handleEvent(message.payload);
+                    } else if (message.type === 'error' || message.type === 'connection_error') {
+                        this.addMessage('system', `❌ Erro: ${JSON.stringify(message.payload)}`);
+                        this.updateStatus('Erro', 'disconnected');
+                    }
+                };
+                
+                this.ws.onerror = () => {
+                    this.addMessage('system', '❌ Erro no WebSocket');
+                    this.updateStatus('Erro', 'disconnected');
+                };
+                
+                this.ws.onclose = () => {
+                    this.addMessage('system', '🔌 Desconectado');
+                    this.updateStatus('Desconectado', 'disconnected');
+                    this.updateStats();
+                };
+            }
+            
+            async createSigV4Authorization(url) {
+                const now = new Date();
+                const amzDate = this.getAmzDate(now);
+                const dateStamp = amzDate.substring(0, 8);
+                const service = 'appsync';
+                const method = 'POST';
+                const canonicalUri = url.pathname;
+                const canonicalQuerystring = '';
+                
+                const canonicalHeaders = 
+                    'host:' + url.host + '\n' +
+                    'x-amz-date:' + amzDate + '\n' +
+                    'x-amz-security-token:' + this.credentials.session_token + '\n';
+                
+                const signedHeaders = 'host;x-amz-date;x-amz-security-token';
+                const payloadHash = await this.sha256('{}');
+                
+                const canonicalRequest = 
+                    method + '\n' +
+                    canonicalUri + '\n' +
+                    canonicalQuerystring + '\n' +
+                    canonicalHeaders + '\n' +
+                    signedHeaders + '\n' +
+                    payloadHash;
+                
+                const algorithm = 'AWS4-HMAC-SHA256';
+                const credentialScope = dateStamp + '/' + this.region + '/' + service + '/aws4_request';
+                const canonicalRequestHash = await this.sha256(canonicalRequest);
+                
+                const stringToSign = 
+                    algorithm + '\n' +
+                    amzDate + '\n' +
+                    credentialScope + '\n' +
+                    canonicalRequestHash;
+                
+                const signingKey = await this.getSignatureKey(
+                    this.credentials.secret_access_key,
+                    dateStamp,
+                    this.region,
+                    service
+                );
+                
+                const signature = await this.hmacSha256Hex(signingKey, stringToSign);
+                
+                return algorithm + ' ' +
+                    'Credential=' + this.credentials.access_key_id + '/' + credentialScope + ', ' +
+                    'SignedHeaders=' + signedHeaders + ', ' +
+                    'Signature=' + signature;
+            }
+            
+            async createSigV4AuthorizationWithPayload(url, payloadString) {
+                const now = new Date();
+                const amzDate = this.getAmzDate(now);
+                const dateStamp = amzDate.substring(0, 8);
+                const service = 'appsync';
+                const method = 'POST';
+                const canonicalUri = url.pathname;
+                const canonicalQuerystring = '';
+                
+                const canonicalHeaders = 
+                    'host:' + url.host + '\n' +
+                    'x-amz-date:' + amzDate + '\n' +
+                    'x-amz-security-token:' + this.credentials.session_token + '\n';
+                
+                const signedHeaders = 'host;x-amz-date;x-amz-security-token';
+                const payloadHash = await this.sha256(payloadString);
+                
+                const canonicalRequest = 
+                    method + '\n' +
+                    canonicalUri + '\n' +
+                    canonicalQuerystring + '\n' +
+                    canonicalHeaders + '\n' +
+                    signedHeaders + '\n' +
+                    payloadHash;
+                
+                const algorithm = 'AWS4-HMAC-SHA256';
+                const credentialScope = dateStamp + '/' + this.region + '/' + service + '/aws4_request';
+                const canonicalRequestHash = await this.sha256(canonicalRequest);
+                
+                const stringToSign = 
+                    algorithm + '\n' +
+                    amzDate + '\n' +
+                    credentialScope + '\n' +
+                    canonicalRequestHash;
+                
+                const signingKey = await this.getSignatureKey(
+                    this.credentials.secret_access_key,
+                    dateStamp,
+                    this.region,
+                    service
+                );
+                
+                const signature = await this.hmacSha256Hex(signingKey, stringToSign);
+                
+                return algorithm + ' ' +
+                    'Credential=' + this.credentials.access_key_id + '/' + credentialScope + ', ' +
+                    'SignedHeaders=' + signedHeaders + ', ' +
+                    'Signature=' + signature;
+            }
+            
+            getAmzDate(date) {
+                const pad = (n) => String(n).padStart(2, '0');
+                return date.getUTCFullYear() +
+                    pad(date.getUTCMonth() + 1) +
+                    pad(date.getUTCDate()) + 'T' +
+                    pad(date.getUTCHours()) +
+                    pad(date.getUTCMinutes()) +
+                    pad(date.getUTCSeconds()) + 'Z';
+            }
+            
+            async sha256(message) {
+                const msgBuffer = new TextEncoder().encode(message);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+            
+            async hmacSha256(key, message) {
+                const keyData = typeof key === 'string' ? new TextEncoder().encode(key) : key;
+                const cryptoKey = await crypto.subtle.importKey(
+                    'raw',
+                    keyData,
+                    { name: 'HMAC', hash: 'SHA-256' },
+                    false,
+                    ['sign']
+                );
+                const signature = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message));
+                return new Uint8Array(signature);
+            }
+            
+            async hmacSha256Hex(key, message) {
+                const signature = await this.hmacSha256(key, message);
+                return Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+            
+            async getSignatureKey(key, dateStamp, regionName, serviceName) {
+                const kDate = await this.hmacSha256('AWS4' + key, dateStamp);
+                const kRegion = await this.hmacSha256(kDate, regionName);
+                const kService = await this.hmacSha256(kRegion, serviceName);
+                const kSigning = await this.hmacSha256(kService, 'aws4_request');
+                return kSigning;
+            }
+            
+            async sendSubscription() {
+                const subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                const graphqlData = {
+                    query: `
+                        subscription OnMessageReceived($sessionId: ID!) {
+                            onMessageReceived(sessionId: $sessionId) {
+                                id
+                                sessionId
+                                text
+                                sender
+                                createdAt
+                            }
+                        }
+                    `,
+                    variables: {
+                        sessionId: this.sessionId
+                    }
+                };
+                
+                const dataString = JSON.stringify(graphqlData);
+                const apiUrl = new URL(this.endpoint);
+                apiUrl.pathname = '/graphql';
+                
+                const authHeader = await this.createSigV4AuthorizationWithPayload(apiUrl, dataString);
+                const amzDate = this.getAmzDate(new Date());
+                
+                const subscriptionMessage = {
+                    id: subscriptionId,
+                    type: 'start',
+                    payload: {
+                        data: dataString,
+                        extensions: {
+                            authorization: {
+                                host: new URL(this.endpoint).host,
+                                'x-amz-date': amzDate,
+                                'x-amz-security-token': this.credentials.session_token,
+                                Authorization: authHeader
+                            }
+                        }
+                    }
+                };
+                
+                this.ws.send(JSON.stringify(subscriptionMessage));
+                this.subscription = true;
+            }
+            
+            handleEvent(payload) {
+                if (payload.data && payload.data.onMessageReceived) {
+                    const msg = payload.data.onMessageReceived;
+                    
+                    this.eventCount++;
+                    this.updateStats();
+                    
+                    const type = msg.sender === 'user' ? 'user' : 'ai';
+                    this.addMessage(type, msg.text, msg.sender, msg.createdAt);
+                }
+            }
+            
+            async sendMessage(text) {
+                try {
+                    this.addMessage('user', text, 'user');
+                    
+                    const response = await axios.post(
+                        `${this.apiUrl}/chat/${this.sessionId}/message`,
+                        { message: text }
+                    );
+                    
+                    if (response.data.success) {
+                        this.messagesSent++;
+                        this.updateStats();
+                        return true;
+                    } else {
+                        throw new Error('Falha ao enviar mensagem');
+                    }
+                } catch (error) {
+                    this.addMessage('system', `❌ Erro ao enviar: ${error.message}`);
+                    return false;
+                }
+            }
+            
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                this.subscription = null;
+            }
+        }
+        
+        // Initialize
+        const client = new AppSyncChatClient();
+        
+        // Event Listeners
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('connectBtn');
+            const apiUrl = document.getElementById('apiUrl').value;
+            const agentId = document.getElementById('agentId').value;
+            const visitorId = document.getElementById('visitorId').value;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-dots">Conectando</span>';
+            
+            const fetched = await client.fetchCredentials(apiUrl, agentId, visitorId);
+            
+            if (fetched && client.validateCredentials()) {
+                const connected = await client.connectToAppSync();
+                
+                if (connected) {
+                    document.getElementById('connectionPanel').classList.add('hidden');
+                    document.getElementById('messageInput').disabled = false;
+                    document.getElementById('sendBtn').disabled = false;
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '🔌 Conectar ao AppSync';
+                }
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '🔌 Conectar ao AppSync';
+            }
+        });
+        
+        // Send message on button click
+        document.getElementById('sendBtn').addEventListener('click', async () => {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            
+            if (text && client.ws && client.ws.readyState === WebSocket.OPEN) {
+                await client.sendMessage(text);
+                input.value = '';
+                input.focus();
+            }
+        });
+        
+        // Send message on Enter key
+        document.getElementById('messageInput').addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('sendBtn').click();
+            }
+        });
+    </script>
+</body>
+</html>
