@@ -907,44 +907,5 @@ Credenciais Temporárias (Frontend)
    }
    ```
 
----
 
-## 📚 Referências
-
-- [AWS Signature Version 4](https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html)
-- [AWS AppSync Real-Time](https://docs.aws.amazon.com/appsync/latest/devguide/real-time-websocket-client.html)
-- [GraphQL Subscriptions](https://graphql.org/blog/subscriptions-in-graphql-and-relay/)
-- [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
-
----
-
-## 👥 Autores
-
-- **Development Team**
-- Desenvolvido em: Outubro 2025
-
----
-
-## 📝 Licença
-
-Proprietary - Internal Use Only
-
----
-
-## 💡 Conclusão
-
-Esta implementação demonstra como criar uma **experiência real-time robusta** usando AWS AppSync com autenticação segura via SigV4. A complexidade da assinatura é compensada pela **segurança**, **escalabilidade** e **confiabilidade** que o AppSync oferece.
-
-**Principais conquistas**:
-- ✅ Autenticação SigV4 completa no navegador
-- ✅ WebSocket persistente com AppSync
-- ✅ Subscriptions GraphQL funcionais
-- ✅ Credenciais temporárias seguras
-- ✅ Interface de chat responsiva
-
-**Tempo de implementação**: ~4 horas de desenvolvimento iterativo com debugging detalhado da assinatura SigV4.
-
----
-
-**🎉 Sucesso Total! Sistema funcionando em produção!**
 
