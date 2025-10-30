@@ -628,7 +628,7 @@
         <div class="input-area">
             <!-- Connection Panel -->
             <div class="connection-panel" id="connectionPanel">
-                <div class="connection-inputs">
+                <div class="connection-inputs" id="normalInputs">
                     <div>
                         <label>API URL</label>
                         <input type="text" id="apiUrl" value="https://api.example.com" placeholder="URL da API">
@@ -641,6 +641,18 @@
                         <label>Visitor ID</label>
                         <input type="text" id="visitorId" value="visitor-1234" placeholder="Visitor ID">
                     </div>
+                </div>
+                <div class="connection-inputs" id="managerInputs" style="display: none;">
+                    <div style="grid-column: 1 / -1;">
+                        <label>API URL</label>
+                        <input type="text" id="apiUrlManager" value="https://api.example.com" placeholder="URL da API">
+                    </div>
+                </div>
+                <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="managerMode" style="width: auto; cursor: pointer;">
+                    <label for="managerMode" style="cursor: pointer; margin: 0; font-size: 13px;">
+                        👤 Modo Manager (ouvir todas as sessions)
+                    </label>
                 </div>
                 <button class="btn-connect" id="connectBtn">🔌 Conectar ao AppSync</button>
             </div>
@@ -673,6 +685,7 @@
                 this.eventCount = 0;
                 this.messagesSent = 0;
                 this.apiUrl = null;
+                this.isManager = false;
             }
             
             addMessage(type, text, sender = null, time = null) {
@@ -755,6 +768,38 @@
                     if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
                         this.addMessage('system', `❌ Erro de CORS! Abrindo modal...`);
                         this.showCorsModal(apiUrl, agentId, visitorId);
+                    } else {
+                        this.addMessage('system', `❌ Erro ao obter credenciais: ${error.message}`);
+                    }
+                    console.error('Erro:', error);
+                    return false;
+                }
+            }
+            
+            async fetchManagerCredentials(apiUrl) {
+                try {
+                    this.addMessage('system', '🔍 Buscando credenciais de manager...');
+                    this.apiUrl = apiUrl;
+                    
+                    const response = await axios.get(`${apiUrl}/manager/credentials`);
+                    
+                    if (!response.data.success) {
+                        throw new Error('Resposta da API não foi bem-sucedida');
+                    }
+                    
+                    const data = response.data.data;
+                    this.endpoint = data.endpoint;
+                    this.region = data.region;
+                    this.credentials = data.credentials;
+                    this.isManager = true;
+                    
+                    this.addMessage('system', `✅ Credenciais de manager obtidas! Você poderá ouvir todas as sessions.`);
+                    
+                    return true;
+                } catch (error) {
+                    if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+                        this.addMessage('system', `❌ Erro de CORS! Abrindo modal...`);
+                        this.showCorsModalManager(apiUrl);
                     } else {
                         this.addMessage('system', `❌ Erro ao obter credenciais: ${error.message}`);
                     }
@@ -854,6 +899,86 @@
                 };
             }
             
+            showCorsModalManager(apiUrl) {
+                const curlCommand = `curl "${apiUrl}/manager/credentials"`;
+                
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop';
+                backdrop.innerHTML = `
+                    <div class="modal-dialog">
+                        <div class="modal-header">
+                            <h2>🚫 Erro de CORS Detectado</h2>
+                            <p>A API bloqueou a requisição do navegador</p>
+                        </div>
+                        <div class="modal-body">
+                            <div class="help-list">
+                                <strong>💡 Soluções:</strong>
+                                <ol>
+                                    <li>Abra o arquivo direto (file://) em vez de localhost</li>
+                                    <li>Use o comando curl abaixo no terminal</li>
+                                    <li>Cole o resultado no campo abaixo</li>
+                                </ol>
+                            </div>
+                            
+                            <h3>📋 Copie este comando:</h3>
+                            <div class="curl-box" id="curlCommand">${curlCommand}</div>
+                            <button class="btn-modal btn-modal-secondary" onclick="navigator.clipboard.writeText(document.getElementById('curlCommand').textContent); this.textContent = '✅ Copiado!'; setTimeout(() => this.textContent = '📋 Copiar Comando', 2000)">📋 Copiar Comando</button>
+                            
+                            <h3 style="margin-top: 25px;">📝 Cole o JSON da resposta aqui:</h3>
+                            <textarea class="modal-textarea" id="credentialsJson" placeholder='{"success": true, "data": {...}}'></textarea>
+                            
+                            <div class="modal-actions">
+                                <button class="btn-modal btn-modal-secondary" id="cancelModal">❌ Cancelar</button>
+                                <button class="btn-modal btn-modal-primary" id="useManualCredentials">✅ Usar Credenciais</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(backdrop);
+                
+                document.getElementById('cancelModal').onclick = () => {
+                    backdrop.remove();
+                };
+                
+                document.getElementById('useManualCredentials').onclick = async () => {
+                    try {
+                        const jsonText = document.getElementById('credentialsJson').value;
+                        const response = JSON.parse(jsonText);
+                        
+                        if (response.success && response.data) {
+                            const data = response.data;
+                            this.endpoint = data.endpoint;
+                            this.region = data.region;
+                            this.credentials = data.credentials;
+                            this.isManager = true;
+                            
+                            this.addMessage('system', `✅ Credenciais de manager aplicadas!`);
+                            
+                            backdrop.remove();
+                            
+                            // Continuar com validação e conexão
+                            if (this.validateCredentials()) {
+                                this.updateStatus('Conectando', 'connecting');
+                                const connected = await this.connectToAppSync();
+                                
+                                if (connected) {
+                                    document.getElementById('connectionPanel').classList.add('hidden');
+                                } else {
+                                    const btn = document.getElementById('connectBtn');
+                                    btn.disabled = false;
+                                    btn.innerHTML = '🔌 Conectar ao AppSync';
+                                }
+                            }
+                        } else {
+                            alert('JSON inválido! Certifique-se de que "success": true está presente.');
+                        }
+                    } catch (error) {
+                        alert('Erro ao processar JSON: ' + error.message);
+                    }
+                };
+            }
+            
             validateCredentials() {
                 try {
                     const expirationDate = new Date(this.credentials.expiration);
@@ -926,7 +1051,17 @@
                     } else if (message.type === 'data') {
                         this.handleEvent(message.payload);
                     } else if (message.type === 'error' || message.type === 'connection_error') {
-                        this.addMessage('system', `❌ Erro: ${JSON.stringify(message.payload)}`);
+                        const errorMsg = JSON.stringify(message.payload);
+                        
+                        // Detectar erro específico de schema GraphQL
+                        if (errorMsg.includes('Cannot query field') && errorMsg.includes('onAllMessagesReceived') && this.isManager) {
+                            this.addMessage('system', `❌ ERRO: O schema GraphQL precisa ser atualizado!`);
+                            this.addMessage('system', `💡 Adicione a subscription 'onAllMessagesReceived' no schema`);
+                            this.addMessage('system', `📝 Schema: type Subscription { onAllMessagesReceived: Message }`);
+                        } else {
+                            this.addMessage('system', `❌ Erro: ${errorMsg}`);
+                        }
+                        
                         this.updateStatus('Erro', 'disconnected');
                     }
                 };
@@ -1089,22 +1224,45 @@
             async sendSubscription() {
                 const subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                 
-                const graphqlData = {
-                    query: `
-                        subscription OnMessageReceived($sessionId: ID!) {
-                            onMessageReceived(sessionId: $sessionId) {
-                                id
-                                sessionId
-                                text
-                                sender
-                                createdAt
+                let graphqlData;
+                
+                if (this.isManager) {
+                    // Manager: ouvir todas as sessions usando onAllMessagesReceived
+                    graphqlData = {
+                        query: `
+                            subscription OnAllMessagesReceived {
+                                onAllMessagesReceived {
+                                    id
+                                    sessionId
+                                    text
+                                    sender
+                                    createdAt
+                                }
                             }
+                        `,
+                        variables: {}
+                    };
+                    this.addMessage('system', '📡 Subscription onAllMessagesReceived registrada (modo manager)');
+                } else {
+                    // Visitante: ouvir apenas uma session específica usando onMessageReceived
+                    graphqlData = {
+                        query: `
+                            subscription OnMessageReceived($sessionId: ID!) {
+                                onMessageReceived(sessionId: $sessionId) {
+                                    id
+                                    sessionId
+                                    text
+                                    sender
+                                    createdAt
+                                }
+                            }
+                        `,
+                        variables: {
+                            sessionId: this.sessionId
                         }
-                    `,
-                    variables: {
-                        sessionId: this.sessionId
-                    }
-                };
+                    };
+                    this.addMessage('system', `📡 Subscription onMessageReceived(${this.sessionId.substring(0, 8)}...) registrada`);
+                }
                 
                 const dataString = JSON.stringify(graphqlData);
                 const apiUrl = new URL(this.endpoint);
@@ -1134,14 +1292,22 @@
             }
             
             handleEvent(payload) {
-                if (payload.data && payload.data.onMessageReceived) {
-                    const msg = payload.data.onMessageReceived;
-                    
+                // Suportar ambos os tipos de subscription
+                const msg = payload.data?.onMessageReceived || payload.data?.onAllMessagesReceived;
+                
+                if (msg) {
                     this.eventCount++;
                     this.updateStats();
                     
                     const type = msg.sender === 'user' ? 'user' : 'ai';
-                    this.addMessage(type, msg.text, msg.sender, msg.createdAt);
+                    
+                    // Se for manager, exibir também o sessionId completo
+                    if (this.isManager) {
+                        const sessionId = msg.sessionId || 'unknown';
+                        this.addMessage(type, `[Session: ${sessionId}] ${msg.text}`, msg.sender, msg.createdAt);
+                    } else {
+                        this.addMessage(type, msg.text, msg.sender, msg.createdAt);
+                    }
                 }
             }
             
@@ -1180,24 +1346,52 @@
         const client = new AppSyncChatClient();
         
         // Event Listeners
+        document.getElementById('managerMode').addEventListener('change', (e) => {
+            const isManager = e.target.checked;
+            const normalInputs = document.getElementById('normalInputs');
+            const managerInputs = document.getElementById('managerInputs');
+            
+            if (isManager) {
+                normalInputs.style.display = 'none';
+                managerInputs.style.display = 'grid';
+            } else {
+                normalInputs.style.display = 'grid';
+                managerInputs.style.display = 'none';
+            }
+        });
+        
         document.getElementById('connectBtn').addEventListener('click', async () => {
             const btn = document.getElementById('connectBtn');
-            const apiUrl = document.getElementById('apiUrl').value;
-            const agentId = document.getElementById('agentId').value;
-            const visitorId = document.getElementById('visitorId').value;
+            const isManagerMode = document.getElementById('managerMode').checked;
             
             btn.disabled = true;
             btn.innerHTML = '<span class="loading-dots">Conectando</span>';
             
-            const fetched = await client.fetchCredentials(apiUrl, agentId, visitorId);
+            let fetched = false;
+            
+            if (isManagerMode) {
+                // Modo Manager
+                const apiUrl = document.getElementById('apiUrlManager').value;
+                fetched = await client.fetchManagerCredentials(apiUrl);
+            } else {
+                // Modo Normal (Visitante)
+                const apiUrl = document.getElementById('apiUrl').value;
+                const agentId = document.getElementById('agentId').value;
+                const visitorId = document.getElementById('visitorId').value;
+                fetched = await client.fetchCredentials(apiUrl, agentId, visitorId);
+            }
             
             if (fetched && client.validateCredentials()) {
                 const connected = await client.connectToAppSync();
                 
                 if (connected) {
                     document.getElementById('connectionPanel').classList.add('hidden');
-                    document.getElementById('messageInput').disabled = false;
-                    document.getElementById('sendBtn').disabled = false;
+                    
+                    // No modo manager, não permitir enviar mensagens (apenas ouvir)
+                    if (!isManagerMode) {
+                        document.getElementById('messageInput').disabled = false;
+                        document.getElementById('sendBtn').disabled = false;
+                    }
                 } else {
                     btn.disabled = false;
                     btn.innerHTML = '🔌 Conectar ao AppSync';
