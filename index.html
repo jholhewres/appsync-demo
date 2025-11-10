@@ -748,6 +748,16 @@
                     }
                     
                     const data = response.data.data;
+                    
+                    // ✨ Verificar se o último chat foi fechado
+                    if (data.has_last_chat_closed !== undefined) {
+                        if (data.has_last_chat_closed) {
+                            this.addMessage('system', '💬 <strong>Bem-vindo de volta!</strong> Seu último chat foi encerrado. Vamos iniciar uma nova conversa!');
+                        } else {
+                            this.addMessage('system', '👋 Continuando a conversa anterior...');
+                        }
+                    }
+                    
                     this.sessionId = data.session_id;
                     this.endpoint = data.web_socket.endpoint;
                     this.region = data.web_socket.region;
@@ -1244,7 +1254,7 @@
                     };
                     this.addMessage('system', '📡 Subscription onAllMessagesReceived registrada (modo manager)');
                 } else {
-                    // Visitante: ouvir apenas uma session específica usando onMessageReceived
+                    // Visitante: ouvir mensagens e eventos de agent toggle
                     graphqlData = {
                         query: `
                             subscription OnMessageReceived($sessionId: ID!) {
@@ -1289,10 +1299,82 @@
                 
                 this.ws.send(JSON.stringify(subscriptionMessage));
                 this.subscription = true;
+                
+                // Registrar subscription para eventos de Agent Toggle
+                await this.sendAgentToggleSubscription();
+            }
+            
+            async sendAgentToggleSubscription() {
+                const subscriptionId = `sub-toggle-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                let graphqlData;
+                
+                if (this.isManager) {
+                    // Manager: ouvir todos os agent toggles
+                    graphqlData = {
+                        query: `
+                            subscription OnAllAgentToggles {
+                                onAllAgentToggles {
+                                    sessionId
+                                    agentActive
+                                    userId
+                                    userName
+                                    timestamp
+                                }
+                            }
+                        `,
+                        variables: {}
+                    };
+                    this.addMessage('system', '📡 Subscription onAllAgentToggles registrada (modo manager)');
+                } else {
+                    // Visitante: ouvir apenas toggles da própria session
+                    graphqlData = {
+                        query: `
+                            subscription OnAgentToggle($sessionId: ID!) {
+                                onAgentToggle(sessionId: $sessionId) {
+                                    sessionId
+                                    agentActive
+                                    userId
+                                    userName
+                                    timestamp
+                                }
+                            }
+                        `,
+                        variables: {
+                            sessionId: this.sessionId
+                        }
+                    };
+                    this.addMessage('system', `📡 Subscription onAgentToggle registrada (agente humano/IA)`);
+                }
+                
+                const dataString = JSON.stringify(graphqlData);
+                const apiUrl = new URL(this.endpoint);
+                apiUrl.pathname = '/graphql';
+                
+                const authHeader = await this.createSigV4AuthorizationWithPayload(apiUrl, dataString);
+                const amzDate = this.getAmzDate(new Date());
+                
+                const subscriptionMessage = {
+                    id: subscriptionId,
+                    type: 'start',
+                    payload: {
+                        data: dataString,
+                        extensions: {
+                            authorization: {
+                                host: new URL(this.endpoint).host,
+                                'x-amz-date': amzDate,
+                                'x-amz-security-token': this.credentials.session_token,
+                                Authorization: authHeader
+                            }
+                        }
+                    }
+                };
+                
+                this.ws.send(JSON.stringify(subscriptionMessage));
             }
             
             handleEvent(payload) {
-                // Suportar ambos os tipos de subscription
+                // Suportar mensagens
                 const msg = payload.data?.onMessageReceived || payload.data?.onAllMessagesReceived;
                 
                 if (msg) {
@@ -1308,6 +1390,36 @@
                     } else {
                         this.addMessage(type, msg.text, msg.sender, msg.createdAt);
                     }
+                }
+                
+                // Suportar eventos de Agent Toggle
+                const toggleEvent = payload.data?.onAgentToggle || payload.data?.onAllAgentToggles;
+                
+                if (toggleEvent) {
+                    this.eventCount++;
+                    this.updateStats();
+                    
+                    let message = '';
+                    
+                    if (toggleEvent.agentActive) {
+                        // IA assumiu
+                        message = '🤖 Agente de IA assumiu a conversa';
+                    } else {
+                        // Humano assumiu
+                        if (toggleEvent.userName) {
+                            message = `👤 ${toggleEvent.userName} (Agente Humano) assumiu a conversa`;
+                        } else {
+                            message = '👤 Agente humano assumiu a conversa';
+                        }
+                    }
+                    
+                    // Se for manager, exibir também o sessionId
+                    if (this.isManager) {
+                        const sessionId = toggleEvent.sessionId || 'unknown';
+                        message = `[Session: ${sessionId}] ${message}`;
+                    }
+                    
+                    this.addMessage('system', message);
                 }
             }
             

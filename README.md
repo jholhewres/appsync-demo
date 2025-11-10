@@ -66,6 +66,7 @@ GET https://api.example.com/agent/{agent_id}/chat/{visitor_id}
 
 // Resposta:
 {
+  "has_last_chat_closed": true,  // ✨ NOVO: indica se o último chat foi encerrado
   "session_id": "...",
   "web_socket": {
     "endpoint": "https://xxx.appsync-api.us-east-1.amazonaws.com/graphql",
@@ -75,7 +76,8 @@ GET https://api.example.com/agent/{agent_id}/chat/{visitor_id}
       "session_token": "...",
       "expiration": "2025-10-23T15:34:11Z"
     }
-  }
+  },
+  "messages": []
 }
 ```
 
@@ -222,6 +224,58 @@ A documentação completa inclui:
 - [x] Tratamento completo de erros
 - [x] Estatísticas de eventos e mensagens
 - [x] Logs detalhados para debugging
+- [x] ✨ Detecção de chat anterior encerrado (`has_last_chat_closed`)
+- [x] ✨ Mensagens contextuais para retorno de visitantes
+
+---
+
+## ✨ Novo: Detecção de Chat Anterior Encerrado
+
+### Campo `has_last_chat_closed`
+
+O campo `has_last_chat_closed` indica se o visitante teve um chat anterior que foi formalmente encerrado.
+
+**Valores possíveis:**
+- `true` - O último chat do visitante foi encerrado (status = "closed")
+- `false` - O último chat não foi encerrado ou não existe chat anterior
+
+**Comportamento no Demo:**
+
+Quando o visitante se conecta, o sistema automaticamente:
+
+1. **Se `has_last_chat_closed = true`:**
+   ```
+   💬 Bem-vindo de volta! Seu último chat foi encerrado. 
+   Vamos iniciar uma nova conversa!
+   ```
+   - Ideal para mostrar mensagem de boas-vindas
+   - Frontend pode limpar contexto anterior
+   - Iniciar conversa "do zero"
+
+2. **Se `has_last_chat_closed = false`:**
+   ```
+   👋 Continuando a conversa anterior...
+   ```
+   - Chat anterior ainda estava aberto/ativo
+   - Manter contexto da conversa
+   - Carregar histórico de mensagens
+
+**Exemplo de Uso no Código:**
+
+```javascript
+const response = await axios.get(`${apiUrl}/agent/${agentId}/chat/${visitorId}`);
+const data = response.data.data;
+
+if (data.has_last_chat_closed) {
+  // Mostrar boas-vindas para nova conversa
+  showWelcomeMessage();
+  clearPreviousContext();
+} else {
+  // Continuar conversa anterior
+  loadChatHistory();
+  showContinuationMessage();
+}
+```
 
 ---
 
